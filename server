@@ -1,0 +1,92 @@
+library(shiny)
+library(cluster)
+library(ggplot2)
+library(reshape2)
+library(shinyjs)
+library(markdown)
+library(corrplot)
+library(tidyverse)
+
+shinyServer(
+  function(input,output, session){
+    
+    output$filterSelector <- renderUI({
+      div(
+        varSelectInput("filter_var", 
+                       "Filter Variable:",
+                       req(tableData())),
+        selectizeInput("filter_vals",
+                       "Filter Values:",
+                       choices=NULL,
+                       multiple = TRUE))
+    })
+  
+    
+    observe({
+      fv <- as.character(req(input$filter_var))
+      td <- req(tableData())
+      if(! fv %in% names(td))
+        return(NULL)
+      updateSelectizeInput(session = session, inputId = "filter_vals",
+                           choices = pull(td,fv))
+    })
+    
+    col_min <- reactive({
+      min = input$valore1
+    })
+    
+    col_max <- reactive({
+      max = input$valore2
+    })
+    tableData <- reactive({
+      inFile <- input$file1
+      
+     if (!is.null(inFile)){
+      read_excel(input$file1$datapath)
+      } else {
+        mtcars
+      }
+    })
+    
+    filteredTableData <- reactive({
+      td <- req(tableData())
+      fv <- req(input$filter_var)
+      fc <- input$filter_vals
+      if (isTruthy(fc)) {
+        dplyr::filter(
+          td,
+          !!sym(fv) %in% fc
+        )
+      } else
+        td
+    })
+    output$table1 = renderTable(filteredTableData())
+    
+    colonne <- reactive({ 
+      database <- filteredTableData()
+      data_size <- ncol(database)
+      returnValue(data_size)
+    })
+    
+    output$my_output_data <- renderText({colonne()})
+    
+    function(input, output) {
+      output$result <- renderText({
+        paste("You chose", input$state)
+      })
+    }
+    
+    
+    output$my_output_data <- renderText({colonne()})
+    ###correlation
+    observeEvent(input$calculate_cor, {
+      intervall <- col_min():col_max()
+      df_data_cor<-filteredTableData()[intervall]
+      df_data_cor_scale<-cor(df_data_cor)
+      
+      output$cor<-renderPlot({
+        corrplot(df_data_cor_scale,
+                 method = "pie", order = "hclust", type = "lower")
+      })
+    })
+  }) 
